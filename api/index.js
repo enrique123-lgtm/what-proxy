@@ -439,3 +439,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('   • Fastest: mistral-medium → Mistral Medium 3.5 (free)');
   console.log('═══════════════════════════════════════════════════════');
 });
+
+module.exports = app;
