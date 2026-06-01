@@ -19,12 +19,17 @@ app.post('/v1/chat/completions', async (req, res) => {
     // Ambil data request dari Janitor AI
     const body = req.body;
 
-    // Pemetaan Model Otomatis dari Janitor ke Groq
-    // Jika di Janitor kamu pilih gpt-4 atau gpt-4o, otomatis diganti ke model monster Llama 3 70B milik Groq
+    // Bersihkan parameter yang ditolak oleh API Groq
+    delete body.repetition_penalty;
+    delete body.frequency_penalty;
+    delete body.presence_penalty;
+    delete body.logit_bias;
+    delete body.top_logprobs;
+
+    // Pemetaan Model Otomatis dari Janitor ke Groq Terbaru
     if (body.model.startsWith('gpt-4') || body.model.startsWith('deepseek')) {
       body.model = 'llama-3.3-70b-versatile';
     } else {
-      // Jika pilih model lain, otomatis pakai Llama 3 8B yang super kilat
       body.model = 'llama-3.1-8b-instant';
     }
 
@@ -53,8 +58,6 @@ app.post('/v1/chat/completions', async (req, res) => {
     }
 
     const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
