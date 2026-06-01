@@ -17,16 +17,14 @@ app.post('/v1/chat/completions', async (req, res) => {
 
     const body = req.body;
 
-    // Bersihkan parameter bawaan Janitor yang sering bikin error di beberapa server
+    // Bersihkan parameter bawaan Janitor yang sering bikin error
     delete body.repetition_penalty;
     delete body.logit_bias;
     delete body.top_logprobs;
+    delete body.top_k;
 
-    // PAKSA MENGGUNAKAN MODEL GRATISAN TERBAIK DARI OPENROUTER
-    // Model ini 100% Free, Tanpa Limit Ketat, Bagus buat Roleplay/Narrative
-    body.model = 'meta-llama/llama-3.1-8b-instruct:free';
-
-    console.log(`Sending request to OpenRouter Free using model: ${body.model}`);
+    // KODE DINAMIS: Mengikuti model apa pun yang kamu ketik/pilih di Janitor AI
+    console.log(`Sending request to OpenRouter using model: ${body.model}`);
 
     // Tembak ke API OpenRouter
     const response = await fetch(OPENROUTER_BASE_URL, {
@@ -34,7 +32,7 @@ app.post('/v1/chat/completions', async (req, res) => {
       headers: {
         'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://janitorai.com', // Formalitas syarat OpenRouter
+        'HTTP-Referer': 'https://janitorai.com', 
         'X-Title': 'Janitor AI Proxy'
       },
       body: JSON.stringify(body)
@@ -65,7 +63,7 @@ app.post('/v1/chat/completions', async (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: "OpenRouter Free Proxy Aktif!" }));
+app.get('/health', (req, res) => res.json({ status: "OpenRouter Dynamic Proxy Aktif!" }));
 app.use((req, res) => res.status(404).json({ error: `Rute ${req.url} tidak ditemukan.` }));
 
 if (process.env.NODE_ENV !== 'production') {
