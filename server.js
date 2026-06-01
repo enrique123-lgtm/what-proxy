@@ -22,10 +22,10 @@ app.post('/v1/chat/completions', async (req, res) => {
     // Pemetaan Model Otomatis dari Janitor ke Groq
     // Jika di Janitor kamu pilih gpt-4 atau gpt-4o, otomatis diganti ke model monster Llama 3 70B milik Groq
     if (body.model.startsWith('gpt-4') || body.model.startsWith('deepseek')) {
-      body.model = 'llama3-70b-8192';
+      body.model = 'llama-3.3-70b-versatile';
     } else {
       // Jika pilih model lain, otomatis pakai Llama 3 8B yang super kilat
-      body.model = 'llama3-8b-8192';
+      body.model = 'llama-3.1-8b-instant';
     }
 
     console.log(`Sending request to Groq using model: ${body.model}`);
