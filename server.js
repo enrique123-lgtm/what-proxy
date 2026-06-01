@@ -420,22 +420,26 @@ app.all('*', (req, res) => {
   });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log('═══════════════════════════════════════════════════════');
-  console.log('🚀 OpenAI → NVIDIA NIM Proxy (Janitor AI Optimized)');
-  console.log('═══════════════════════════════════════════════════════');
-  console.log(`📡 Server running on port ${PORT}`);
-  console.log(`🏥 Health check: http://localhost:${PORT}/health`);
-  console.log(`📋 Models list: http://localhost:${PORT}/v1/models`);
-  console.log('');
-  console.log('⚙️  Configuration:');
-  console.log(`   • Reasoning display: ${SHOW_REASONING ? '✅ ENABLED' : '❌ DISABLED'}`);
-  console.log(`   • Thinking mode: ${ENABLE_THINKING_MODE ? '✅ ENABLED' : '❌ DISABLED'}`);
-  console.log(`   • API key: ${NIM_API_KEY ? '✅ Configured' : '❌ Missing'}`);
-  console.log('');
-  console.log('🎯 Featured Models:');
-  console.log('   • Best Quality: gpt-4 → DeepSeek V4 Pro (1M ctx)');
-  console.log('   • Balanced: gpt-4o → DeepSeek V4 Flash (fast MoE)');
-  console.log('   • Fastest: mistral-medium → Mistral Medium 3.5 (free)');
-  console.log('═══════════════════════════════════════════════════════');
-});
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('🚀 OpenAI → NVIDIA NIM Proxy (Janitor AI Optimized)');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log(`📡 Server running on port ${PORT}`);
+    console.log(`🏥 Health check: http://localhost:${PORT}/health`);
+    console.log(`📋 Models list: http://localhost:${PORT}/v1/models`);
+    console.log('');
+    console.log('⚙️  Configuration:');
+    console.log(`   • Reasoning display: ${SHOW_REASONING ? '✅ ENABLED' : '❌ DISABLED'}`);
+    console.log(`   • Thinking mode: ${ENABLE_THINKING_MODE ? '✅ ENABLED' : '❌ DISABLED'}`);
+    console.log(`   • API key: ${NIM_API_KEY ? '✅ Configured' : '❌ Missing'}`);
+    console.log('');
+    console.log('🎯 Featured Models:');
+    console.log('   • Best Quality: gpt-4 → DeepSeek V4 Pro (1M ctx)');
+    console.log('   • Balanced: gpt-4o → DeepSeek V4 Flash (fast MoE)');
+    console.log('   • Fastest: mistral-medium → Mistral Medium 3.5 (free)');
+    console.log('═══════════════════════════════════════════════════════');
+  });
+}
+
+module.exports = app;
