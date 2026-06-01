@@ -24,7 +24,7 @@ app.post('/v1/chat/completions', async (req, res) => {
 
     // PAKSA MENGGUNAKAN MODEL GRATISAN TERBAIK DARI OPENROUTER
     // Model ini 100% Free, Tanpa Limit Ketat, Bagus buat Roleplay/Narrative
-    body.model = 'meta-llama/llama-3-8b-instruct:free';
+    body.model = 'meta-llama/llama-3.1-8b-instruct:free';
 
     console.log(`Sending request to OpenRouter Free using model: ${body.model}`);
 
