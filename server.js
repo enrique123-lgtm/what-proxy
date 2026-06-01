@@ -19,12 +19,13 @@ app.post('/v1/chat/completions', async (req, res) => {
     // Ambil data request dari Janitor AI
     const body = req.body;
 
-    // Bersihkan parameter yang ditolak oleh API Groq
+    // Bersihkan SEMUA parameter yang tidak didukung atau ditolak oleh API Groq
     delete body.repetition_penalty;
     delete body.frequency_penalty;
     delete body.presence_penalty;
     delete body.logit_bias;
     delete body.top_logprobs;
+    delete body.top_k; // <-- Tambahan penyaring untuk eror terbaru ini
 
     // Pemetaan Model Otomatis dari Janitor ke Groq Terbaru
     if (body.model.startsWith('gpt-4') || body.model.startsWith('deepseek')) {
