@@ -16,18 +16,12 @@ app.post('/v1/chat/completions', async (req, res) => {
 
     const body = req.body;
 
-    // Bersihkan parameter bawaan Janitor agar tidak ditolak oleh NVIDIA
-    delete body.repetition_penalty;
-    delete body.frequency_penalty;
-    delete body.presence_penalty;
-    delete body.logit_bias;
-    delete body.top_logprobs;
-    delete body.top_k;
-
-    // KUNCI MODEL MONSTER DARI NVIDIA (Llama 3.1 70B - Sangat Pintar & Panjang)
+    // KUNCI MODEL MONSTER DARI NVIDIA (Llama 3.1 70B)
     body.model = 'meta/llama-3.1-70b-instruct';
 
-    console.log(`Sending request to NVIDIA API using model: ${body.model}`);
+    // PARAMETER SEKARANG DITERUSKAN UTUH KE NVIDIA
+    // Janitor AI akan bebas mengatur repetition_penalty, temperature, dll.
+    console.log(`Sending full request to NVIDIA API using model: ${body.model}`);
 
     // Tembak ke API NVIDIA
     const response = await fetch(NVIDIA_URL, {
@@ -45,7 +39,7 @@ app.post('/v1/chat/completions', async (req, res) => {
       return res.status(response.status).send(errorData);
     }
 
-    // Teruskan balasan langsung ke Janitor AI (Mendukung Streaming biar ngetik langsung)
+    // Teruskan balasan langsung ke Janitor AI (Mendukung Streaming)
     res.setHeader('Content-Type', req.headers['content-type'] || 'application/json');
     if (body.stream) {
       res.setHeader('Transfer-Encoding', 'chunked');
@@ -65,7 +59,7 @@ app.post('/v1/chat/completions', async (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: "NVIDIA Proxy Aktif!" }));
+app.get('/health', (req, res) => res.json({ status: "NVIDIA Proxy Full Parameters Aktif!" }));
 app.use((req, res) => res.status(404).json({ error: `Rute ${req.url} tidak ditemukan.` }));
 
 if (process.env.NODE_ENV !== 'production') {
