@@ -17,7 +17,7 @@ app.post('/v1/chat/completions', async (req, res) => {
     const body = req.body;
 
     // KUNCI MODEL MONSTER DARI NVIDIA (Llama 3.1 70B)
-    body.model = 'deepseek-v3.2';
+    body.model = 'deepseek-ai/deepseek-r1';
 
     // PARAMETER SEKARANG DITERUSKAN UTUH KE NVIDIA
     // Janitor AI akan bebas mengatur repetition_penalty, temperature, dll.
