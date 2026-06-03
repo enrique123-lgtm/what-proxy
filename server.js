@@ -8,7 +8,6 @@ app.use(express.json());
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
 const NVIDIA_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 
-// Menangkap rute utama maupun rute /v1/chat/completions sekaligus agar anti-error 404
 const handleChat = async (req, res) => {
   try {
     if (!NVIDIA_API_KEY) {
@@ -17,12 +16,14 @@ const handleChat = async (req, res) => {
 
     const body = req.body;
 
-    // Kunci model ke DeepSeek V3 resmi yang terdaftar di NVIDIA
+    // Pastikan fitur streaming menyala agar tidak terkena timeout 10 detik di Vercel
+    body.stream = true;
+    
+    // Kunci model ke DeepSeek V3 resmi NVIDIA
     body.model = 'deepseek-ai/deepseek-v3';
 
-    console.log(`Mengirim request ke NVIDIA API menggunakan model: ${body.model}`);
+    console.log(`Mengirim request streaming ke NVIDIA: ${body.model}`);
 
-    // Tembak ke API NVIDIA
     const response = await fetch(NVIDIA_URL, {
       method: 'POST',
       headers: {
@@ -34,36 +35,40 @@ const handleChat = async (req, res) => {
 
     if (!response.ok) {
       const errorData = await response.text();
-      console.error("NVIDIA Error Response:", errorData);
+      console.error("NVIDIA Error:", errorData);
       return res.status(response.status).send(errorData);
     }
 
-    // Teruskan balasan langsung ke Janitor AI (Mendukung Streaming)
-    res.setHeader('Content-Type', req.headers['content-type'] || 'application/json');
-    if (body.stream) {
-      res.setHeader('Transfer-Encoding', 'chunked');
-    }
+    // Set header khusus untuk streaming teks agar Janitor langsung membacanya sewaktu diketik
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Transfer-Encoding', 'chunked');
 
+    // Alirkan data secara mentah (raw stream) langsung dari NVIDIA ke Janitor AI
     const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      
+      // Kirim potongan teks langsung tanpa ditahan di server proxy
       res.write(value);
     }
     res.end();
 
   } catch (error) {
-    console.error("Proxy Error Detail:", error);
-    res.status(500).json({ error: "Terjadi kesalahan internal pada server proxy." });
+    console.error("Proxy Stream Error:", error);
+    res.status(500).json({ error: "Terjadi kesalahan internal pada server proxy streaming." });
   }
 };
 
-// Pasang handler di semua rute yang mungkin ditembak Janitor AI
 app.post('/v1/chat/completions', handleChat);
 app.post('/', handleChat);
 
-app.get('/health', (req, res) => res.json({ status: "NVIDIA Proxy Ready!" }));
-app.get('/', (req, res) => res.json({ status: "Server Proxy Berjalan Lancar!" }));
+app.get('/health', (req, res) => res.json({ status: "NVIDIA Stream Proxy Ready!" }));
+app.get('/', (req, res) => res.json({ status: "Server Berjalan Lancar!" }));
 
 if (process.env.NODE_ENV !== 'production') {
   const PORT = process.env.PORT || 3000;
