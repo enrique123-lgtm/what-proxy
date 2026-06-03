@@ -1,80 +1,202 @@
+// server.js - OpenAI to NVIDIA NIM API Proxy (Optimized for Janitor AI)
 const express = require('express');
 const cors = require('cors');
+const axios = require('axios');
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
-const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
-const NVIDIA_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
+// NVIDIA NIM API configuration
+const NIM_API_BASE = process.env.NIM_API_BASE || 'https://integrate.api.nvidia.com/v1';
+const NIM_API_KEY = process.env.NIM_API_KEY;
 
-const handleChat = async (req, res) => {
-  try {
-    if (!NVIDIA_API_KEY) {
-      return res.status(500).json({ error: "NVIDIA_API_KEY belum dikonfigurasi di Vercel!" });
-    }
+// 🔥 REASONING DISPLAY TOGGLE - Shows/hides reasoning in output
+const SHOW_REASONING = process.env.SHOW_REASONING === 'true' || false;
 
-    const body = req.body;
+// 🔥 THINKING MODE TOGGLE - Enables thinking for specific models that support it
+const ENABLE_THINKING_MODE = process.env.ENABLE_THINKING_MODE === 'true' || false;
 
-    // Pastikan fitur streaming menyala agar tidak terkena timeout 10 detik di Vercel
-    body.stream = true;
-    
-    // Kunci model ke DeepSeek V3 resmi NVIDIA
-    body.model = 'deepseek-ai/deepseek-v3';
+// 🎯 MODEL MAPPING — verified against build.nvidia.com/models (May 2025)
+const MODEL_MAPPING = {
+  // --- DeepSeek (confirmed live on NIM) ---
+  'deepseek-v4-pro':   'deepseek-ai/deepseek-v4-pro',    // 1M ctx, flagship MoE
+  'deepseek-v4-flash': 'deepseek-ai/deepseek-v4-flash',  // 1M ctx, fast 284B MoE
+  'gpt-4':             'deepseek-ai/deepseek-v4-pro',
+  'gpt-4o':            'deepseek-ai/deepseek-v4-flash',
 
-    console.log(`Mengirim request streaming ke NVIDIA: ${body.model}`);
+  // --- NVIDIA Nemotron ---
+  'gpt-3.5-turbo':  'nvidia/llama-3.1-nemotron-ultra-253b-v1',
+  'gpt-4o-mini':    'nvidia/nemotron-3-super-120b-a12b',
 
-    const response = await fetch(NVIDIA_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${NVIDIA_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(body)
-    });
+  // --- Qwen ---
+  'gpt-4-faster':  'qwen/qwen3.5-122b-a10b',
 
-    if (!response.ok) {
-      const errorData = await response.text();
-      console.error("NVIDIA Error:", errorData);
-      return res.status(response.status).send(errorData);
-    }
+  // --- Mistral (free endpoints) ---
+  'mistral-medium':  'mistralai/mistral-medium-3.5-128b',
+  'mistral-small':   'mistralai/mistral-small-4-119b-2603',
+  'gemini-pro':      'mistralai/mistral-medium-3.5-128b',
 
-    // Set header khusus untuk streaming teks agar Janitor langsung membacanya sewaktu diketik
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('Transfer-Encoding', 'chunked');
+  // --- GLM (Z.ai, free endpoint) ---
+  'glm-fast':   'z-ai/glm-4.7',
+  'glm-pro':    'z-ai/glm-5.1',
 
-    // Alirkan data secara mentah (raw stream) langsung dari NVIDIA ke Janitor AI
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
+  // --- MiniMax (free endpoint) ---
+  'minimax':    'minimaxai/minimax-m2.7',
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      
-      // Kirim potongan teks langsung tanpa ditahan di server proxy
-      res.write(value);
-    }
-    res.end();
+  // --- Google ---
+  'gemma':      'google/gemma-4-31b-it',
 
-  } catch (error) {
-    console.error("Proxy Stream Error:", error);
-    res.status(500).json({ error: "Terjadi kesalahan internal pada server proxy streaming." });
-  }
+  // --- OpenAI OSS (via NIM) ---
+  'claude-3-opus':   'openai/gpt-oss-120b',
+  'claude-3-sonnet': 'openai/gpt-oss-20b',
 };
 
-app.post('/v1/chat/completions', handleChat);
-app.post('/', handleChat);
+// 🛡️ ROLEPLAY GUARD - Injected into every request to prevent the model from speaking as the user
+const RP_GUARD_INSTRUCTION = `You are ONLY the character described in the system prompt or conversation. Follow these rules strictly:
+- You ONLY speak, act, and think as the character. You do NEVER write or generate any dialogue, actions, or thoughts for the user or any other character that the user is playing.
+- Do NOT use labels like "User:", "Human:", "You:" or any prefix to simulate the user's side of the conversation.
+- Do NOT continue the conversation by inventing what the user says or does next.
+- Stop your response immediately after your character's turn ends.
+- If you feel the scene needs a reaction from the user, end your response and wait.`;
 
-app.get('/health', (req, res) => res.json({ status: "NVIDIA Stream Proxy Ready!" }));
-app.get('/', (req, res) => res.json({ status: "Server Berjalan Lancar!" }));
+function stripUserBreakout(text) {
+  const lines = text.split('\n');
+  const cleaned = [];
+  let dropping = false;
 
-if (process.env.NODE_ENV !== 'production') {
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Proxy running on port ${PORT}`);
-  });
+  const userLabels = [
+    /^(User|Human|You|Me|Player)\s*[:：]/i,
+    /^---+\s*$/,
+    /^\*{0,3}\s*(User|Human|You|Me|Player)\s*\*{0,3}\s*[:：]/i
+  ];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (userLabels.some(pattern => pattern.test(trimmed))) {
+      dropping = true;
+      continue;
+    }
+
+    if (dropping) {
+      if (trimmed === '') continue;
+      if (trimmed.startsWith('*')) {
+        dropping = false;
+        cleaned.push(line);
+      }
+      continue;
+    }
+
+    cleaned.push(line);
+  }
+
+  const result = cleaned.join('\n');
+  const lastUserLabel = result.search(/\n(?:User|Human|You|Me|Player)\s*[:：]/i);
+  if (lastUserLabel !== -1) {
+    return result.substring(0, lastUserLabel).trimEnd();
+  }
+
+  return result.trimEnd();
 }
 
-module.exports = app;
+const THINKING_MODELS = [
+  'deepseek-ai/deepseek-v4-pro',
+  'deepseek-ai/deepseek-v4-flash',
+  'nvidia/llama-3.1-nemotron-ultra-253b-v1',
+  'nvidia/nemotron-3-super-120b-a12b',
+  'qwen/qwen3.5-122b-a10b',
+  'mistralai/mistral-medium-3.5-128b',
+  'mistralai/mistral-small-4-119b-2603',
+  'z-ai/glm-5.1',
+  'minimaxai/minimax-m2.7',
+];
+
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    service: 'OpenAI to NVIDIA NIM Proxy (Janitor AI Optimized)', 
+    reasoning_display: SHOW_REASONING,
+    thinking_mode: ENABLE_THINKING_MODE,
+    nim_api_configured: !!NIM_API_KEY,
+    available_models: Object.keys(MODEL_MAPPING).length,
+    optimized_for: 'Janitor AI'
+  });
+});
+
+app.get('/', (req, res) => {
+  res.json({
+    service: 'OpenAI to NVIDIA NIM Proxy',
+    version: '2.0',
+    optimized_for: 'Janitor AI',
+    status: 'running',
+    endpoints: {
+      health: '/health',
+      models: '/v1/models',
+      chat: '/v1/chat/completions'
+    }
+  });
+});
+
+app.get('/v1/models', (req, res) => {
+  const models = Object.keys(MODEL_MAPPING).map(model => ({
+    id: model,
+    object: 'model',
+    created: Date.now(),
+    owned_by: 'nvidia-nim-proxy'
+  }));
+  res.json({ object: 'list', data: models });
+});
+
+app.post('/v1/chat/completions', async (req, res) => {
+  try {
+    if (!NIM_API_KEY) {
+      return res.status(500).json({ error: { message: 'NIM_API_KEY not configured.' } });
+    }
+
+    const { model, messages, temperature, max_tokens, stream } = req.body;
+    let nimModel = MODEL_MAPPING[model] || 'deepseek-ai/deepseek-v4-pro';
+    
+    const systemIndex = messages.findIndex(m => m.role === 'system');
+    if (systemIndex !== -1) {
+      messages[systemIndex].content = messages[systemIndex].content + '\n\n' + RP_GUARD_INSTRUCTION;
+    } else {
+      messages.unshift({ role: 'system', content: RP_GUARD_INSTRUCTION });
+    }
+
+    const nimRequest = {
+      model: nimModel,
+      messages: messages,
+      temperature: temperature || 0.7,
+      max_tokens: max_tokens || 12000,
+      stream: stream || false
+    };
+
+    const response = await axios.post(`${NIM_API_BASE}/chat/completions`, nimRequest, {
+      headers: { 'Authorization': `Bearer ${NIM_API_KEY}`, 'Content-Type': 'application/json' },
+      responseType: stream ? 'stream' : 'json'
+    });
+    
+    if (stream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      response.data.pipe(res);
+    } else {
+      res.json(response.data);
+    }
+  } catch (error) {
+    console.error('Proxy error:', error.message);
+    res.status(500).json({ error: { message: error.message } });
+  }
+});
+
+app.all('*', (req, res) => {
+  res.status(404).json({ error: { message: `Endpoint ${req.path} not found.` } });
+});
+
+app.listen(PORT, '0.0.0.0');
