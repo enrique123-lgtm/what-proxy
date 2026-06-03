@@ -5,35 +5,31 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Ambil API Key dari Environment Variable Vercel
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const POLLINATIONS_URL = 'https://text.pollinations.ai/openai';
 
 app.post('/v1/chat/completions', async (req, res) => {
   try {
-    if (!OPENROUTER_API_KEY) {
-      return res.status(500).json({ error: "OPENROUTER_API_KEY belum dikonfigurasi di Vercel!" });
-    }
-
     const body = req.body;
 
-    // Bersihkan parameter bawaan Janitor yang sering bikin error
+    // Bersihkan parameter bawaan Janitor agar formatnya bersih 100%
     delete body.repetition_penalty;
+    delete body.frequency_penalty;
+    delete body.presence_penalty;
     delete body.logit_bias;
     delete body.top_logprobs;
     delete body.top_k;
 
-    // KODE DINAMIS: Mengikuti model apa pun yang kamu ketik/pilih di Janitor AI
-    console.log(`Sending request to OpenRouter using model: ${body.model}`);
+    // KUNCI MODEL TERBAIK POLLINATIONS
+    // Pilihan: 'llama' (Llama 3.1 70B - Pintar) atau 'mistral' (Mistral Nemo - Kreatif)
+    body.model = 'llama'; 
 
-    // Tembak ke API OpenRouter
-    const response = await fetch(OPENROUTER_BASE_URL, {
+    console.log(`Sending request to Pollinations AI using model: ${body.model}`);
+
+    // Tembak langsung ke API Publik Pollinations
+    const response = await fetch(POLLINATIONS_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://janitorai.com', 
-        'X-Title': 'Janitor AI Proxy'
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(body)
     });
@@ -43,7 +39,7 @@ app.post('/v1/chat/completions', async (req, res) => {
       return res.status(response.status).send(errorData);
     }
 
-    // Teruskan balasan langsung ke Janitor AI (Mendukung Streaming teks)
+    // Teruskan balasan ke Janitor AI (Mendukung Streaming teks biar ngetik langsung)
     res.setHeader('Content-Type', req.headers['content-type'] || 'application/json');
     if (body.stream) {
       res.setHeader('Transfer-Encoding', 'chunked');
@@ -59,17 +55,17 @@ app.post('/v1/chat/completions', async (req, res) => {
 
   } catch (error) {
     console.error("Proxy Error:", error);
-    res.status(500).json({ error: "Terjadi kesalahan pada server proxy." });
+    res.status(500).json({ error: "Terjadi kesalahan pada server proxy Pollinations." });
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: "OpenRouter Dynamic Proxy Aktif!" }));
+app.get('/health', (req, res) => res.json({ status: "Pollinations Proxy Aktif Selamanya!" }));
 app.use((req, res) => res.status(404).json({ error: `Rute ${req.url} tidak ditemukan.` }));
 
 if (process.env.NODE_ENV !== 'production') {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 OpenRouter Proxy running on port ${PORT}`);
+    console.log(`🚀 Pollinations Proxy running on port ${PORT}`);
   });
 }
 
