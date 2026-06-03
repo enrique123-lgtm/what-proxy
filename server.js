@@ -8,7 +8,8 @@ app.use(express.json());
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
 const NVIDIA_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 
-app.post('/v1/chat/completions', async (req, res) => {
+// Menangkap rute utama maupun rute /v1/chat/completions sekaligus agar anti-error 404
+const handleChat = async (req, res) => {
   try {
     if (!NVIDIA_API_KEY) {
       return res.status(500).json({ error: "NVIDIA_API_KEY belum dikonfigurasi di Vercel!" });
@@ -16,12 +17,10 @@ app.post('/v1/chat/completions', async (req, res) => {
 
     const body = req.body;
 
-    // KUNCI MODEL MONSTER DARI NVIDIA (Llama 3.1 70B)
-    body.model = 'deepseek-ai/deepseek-r1';
+    // Kunci model ke DeepSeek V3 resmi yang terdaftar di NVIDIA
+    body.model = 'deepseek-ai/deepseek-v3';
 
-    // PARAMETER SEKARANG DITERUSKAN UTUH KE NVIDIA
-    // Janitor AI akan bebas mengatur repetition_penalty, temperature, dll.
-    console.log(`Sending full request to NVIDIA API using model: ${body.model}`);
+    console.log(`Mengirim request ke NVIDIA API menggunakan model: ${body.model}`);
 
     // Tembak ke API NVIDIA
     const response = await fetch(NVIDIA_URL, {
@@ -55,17 +54,21 @@ app.post('/v1/chat/completions', async (req, res) => {
 
   } catch (error) {
     console.error("Proxy Error Detail:", error);
-    res.status(500).json({ error: "Terjadi kesalahan pada server proxy NVIDIA." });
+    res.status(500).json({ error: "Terjadi kesalahan internal pada server proxy." });
   }
-});
+};
 
-app.get('/health', (req, res) => res.json({ status: "NVIDIA Proxy Full Parameters Aktif!" }));
-app.use((req, res) => res.status(404).json({ error: `Rute ${req.url} tidak ditemukan.` }));
+// Pasang handler di semua rute yang mungkin ditembak Janitor AI
+app.post('/v1/chat/completions', handleChat);
+app.post('/', handleChat);
+
+app.get('/health', (req, res) => res.json({ status: "NVIDIA Proxy Ready!" }));
+app.get('/', (req, res) => res.json({ status: "Server Proxy Berjalan Lancar!" }));
 
 if (process.env.NODE_ENV !== 'production') {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 NVIDIA Proxy running on port ${PORT}`);
+    console.log(`🚀 Proxy running on port ${PORT}`);
   });
 }
 
