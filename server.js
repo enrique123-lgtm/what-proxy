@@ -19,6 +19,12 @@ app.post('/v1/chat/completions', async (req, res) => {
     const body = req.body;
 
     // Bersihkan parameter bawaan Janitor agar formatnya klop dengan Hugging Face
+    delete body.repetition_penalty;
+    delete body.frequency_penalty;
+    delete body.presence_penalty;
+    delete body.logit_bias;
+    delete body.top_logprobs;
+    delete body.top_k;
 
     // Paksa set model agar sesuai dengan endpoint URL
     body.model = 'Qwen/Qwen2.5-72B-Instruct';
